@@ -31,13 +31,16 @@ function App() {
 
                 // Check if the connected wallet is the government official
                 setIsOfficial(accounts[0].toLowerCase() === officialAddress.toLowerCase());
+
+                // Load tenders after setting up the contract
+                await loadTenders(tenderContract);
             } else {
                 alert('MetaMask not detected!');
             }
         };
 
         connectWallet();
-        loadTenders();
+        // loadTenders();
 
 
         // Add event listener for account change
@@ -53,24 +56,24 @@ function App() {
         };
     }, []);
 
-    const loadTenders = async () => {
-        if (contract) {
+    const loadTenders = async (tenderContract = contract) => {
+        if (tenderContract) {
             let tempTenders = [];
-            const totalTenders = await contract.tenderCounter();
-            console.log("TotalTenders:",totalTenders);
+            const totalTenders = await tenderContract.tenderCounter();
+            console.log("TotalTenders:", totalTenders);
             for (let i = 1; i <= totalTenders; i++) {
-                const tender = await contract.getTenderDetails(i);
+                const tender = await tenderContract.getTenderDetails(i);
                 tempTenders.push({ id: i, ...tender });
             }
             setTenders(tempTenders);
-            console.log("tempTenders:\n",tempTenders);
+            // console.log("tempTenders:\n", tempTenders);
 
         }
     };
 
     const createTender = async () => {
         if (contract) {
-       
+
             const tx = await contract.createTender(newTenderDesc, ethers.parseUnits(minBidAmount.toString(), 'wei'));
             await tx.wait();
             alert('Tender created successfully!');
@@ -88,8 +91,42 @@ function App() {
     };
 
     const viewBids = async (tenderId) => {
+        console.log("Tender Id: ",tenderId);
         if (contract) {
-            const bidsList = await contract.getBids(tenderId);
+            // const bidsList = await contract.getBids(tenderId);
+            // setBids(bidsList);
+            // console.log("Bids length: ",bids.length);
+            // console.log("Bids: ",bids);
+            // setSelectedTenderId(tenderId);
+
+
+
+
+            // const rawBidsList = await contract.getBids(tenderId);
+            // // Convert the Proxy to a standard array if necessary
+            // const bidsList = Array.isArray(rawBidsList) ? rawBidsList : Array.from(rawBidsList);
+
+            // console.log(`Bids for Tender ID ${tenderId}:`, bidsList);
+
+            // const formattedBids = bidsList.map((bid) => ({
+            //     bidder: bid.bidder || 'N/A',
+            //     amount: bid.bidAmount ? ethers.formatUnits(bid.bidAmount, 'wei') : null,
+            // }));
+
+            // setBids(formattedBids);
+            // setSelectedTenderId(tenderId);
+
+
+            const rawBidsList = await contract.getBids(tenderId);
+        
+            // Attempt to resolve Proxy by manually iterating or using mapping utilities
+            const bidsList = rawBidsList.map((bid) => ({
+                bidder: bid.bidder || 'N/A',
+                amount: bid.bidAmount ? ethers.formatUnits(bid.bidAmount, 'wei') : null,
+            }));
+
+            // console.log("Bids after mapping:", bidsList);
+
             setBids(bidsList);
             setSelectedTenderId(tenderId);
         }
@@ -121,10 +158,17 @@ function App() {
                             onChange={(e) => setNewTenderDesc(e.target.value)}
                         />
                         <input
-                            type="number"
+                            type="text"
                             placeholder="Minimum Bid Amount (wei)"
                             value={minBidAmount}
-                            onChange={(e) => setMinBidAmount(parseInt(e.target.value))}
+                            onChange={(e) => {
+                                const parsedValue = parseInt(e.target.value);
+                                if (!isNaN(parsedValue)) {
+                                    setMinBidAmount(parsedValue);
+                                } else {
+                                    setMinBidAmount(''); // Reset if input is invalid
+                                }
+                            }}
                         />
                         <button onClick={createTender}>Create Tender</button>
                     </div>
@@ -136,7 +180,7 @@ function App() {
                                 <p>Description: {tender[1]}</p>
                                 <p>Minimum Bid: {tender[2] ? ethers.formatUnits(tender[2], 'wei') : 'N/A'} wei</p>
                                 {/* <p>Minimum Bid: {ethers.formatUnits(tender.minBidAmount, 'wei')} wei</p> */}
-                                <p>Status: {tender.isOpen ? 'Open' : 'Closed'}</p>
+                                <p>Status: {tender[3] ? 'Open' : 'Closed'}</p>
                                 <button onClick={() => viewBids(tender.id)}>View Bids</button>
                             </li>
                         ))}
@@ -149,7 +193,7 @@ function App() {
                                 {bids.map((bid, index) => (
                                     <li key={index}>
                                         <p>Bidder: {bid.bidder}</p>
-                                        {/* <p>Bid Amount: {ethers.formatUnits(bid.amount, 'wei')} wei</p> */}
+                                        <p>Bid Amount: {ethers.formatUnits(bid.amount, 'wei')} wei</p>
                                         <button onClick={() => selectWinner(selectedTenderId, bid.bidder)}>
                                             Select as Winner
                                         </button>
@@ -169,13 +213,24 @@ function App() {
                                 <p>Tender ID: {tender.id}</p>
                                 <p>Description: {tender[1]}</p>
                                 <p>Minimum Bid: {tender[2] ? ethers.formatUnits(tender[2], 'wei') : 'N/A'} wei</p>
-                                <p>Status: {tender.isOpen ? 'Open' : 'Closed'}</p>
-                                {tender.isOpen && (
+                                <p>Status: {tender[3] ? 'Open' : 'Closed'}</p>
+                                {tender[3] && (
                                     <div>
                                         <input
-                                            type="number"
+                                            
+                                            type="text"
                                             placeholder="Your Bid Amount (wei)"
-                                            onChange={(e) => setBidAmount(e.target.value)}
+                                            
+                                            onChange={(e) => {
+                                                const parsedValue = parseInt(e.target.value);
+                                                if (!isNaN(parsedValue)) {
+                                                    setBidAmount(parsedValue);
+                                                } else {
+                                                    setBidAmount(''); // Reset if input is invalid
+                                                }
+                                            }}
+                                        
+                                        
                                         />
                                         <button onClick={() => submitBid(tender.id)}>Submit Bid</button>
                                     </div>
