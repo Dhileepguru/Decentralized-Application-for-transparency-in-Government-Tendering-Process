@@ -51,20 +51,38 @@ contract Tender {
         return bids[tenderId];
     }
 
-    function selectWinner(uint tenderId) public onlyGovernmentOfficial {
+    function chooseWinner(uint tenderId, address winnerAddress) public onlyGovernmentOfficial {
         require(tenders[tenderId].isOpen, "Tender is already closed");
 
-        uint lowestBid = type(uint).max;
-        address lowestBidder;
+        bool validBidder = false;
 
-        for(uint i=0; i< bids[tenderId].length; i++){
-            if(bids[tenderId][i].bidAmount < lowestBid){
-                lowestBid = bids[tenderId][i].bidAmount;
-                lowestBidder = bids[tenderId][i].bidder;
+        // Check if the selected address is a valid bidder
+        for (uint i = 0; i < bids[tenderId].length; i++) {
+            if (bids[tenderId][i].bidder == winnerAddress) {
+                validBidder = true;
+                break;
             }
         }
 
-        tenders[tenderId].winner = lowestBidder;
+        require(validBidder, "Selected address is not a valid bidder");
+
+        tenders[tenderId].winner = winnerAddress;
         tenders[tenderId].isOpen = false;
     }
+    // function selectWinner(uint tenderId) public onlyGovernmentOfficial {
+    //     require(tenders[tenderId].isOpen, "Tender is already closed");
+
+    //     uint lowestBid = type(uint).max;
+    //     address lowestBidder;
+
+    //     for(uint i=0; i< bids[tenderId].length; i++){
+    //         if(bids[tenderId][i].bidAmount < lowestBid){
+    //             lowestBid = bids[tenderId][i].bidAmount;
+    //             lowestBidder = bids[tenderId][i].bidder;
+    //         }
+    //     }
+
+    //     tenders[tenderId].winner = lowestBidder;
+    //     tenders[tenderId].isOpen = false;
+    // }
 }

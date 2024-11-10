@@ -12,11 +12,15 @@ function App() {
     const [tenders, setTenders] = useState([]);
     const [selectedTenderId, setSelectedTenderId] = useState(null);
     const [bids, setBids] = useState([]);
+    const [sortedBids, setSortedBids] = useState([]);
+    const [winners, setWinners] = useState({});
     const [bidAmount, setBidAmount] = useState(0);
     const [newTenderDesc, setNewTenderDesc] = useState('');
+    const [selectedWinner, setSelectedWinner] = useState(null);
     const [minBidAmount, setMinBidAmount] = useState(0);
-    const contractAddress = '0xBeB7D590cEe06A941db8302434D023b52283D30B'; // Replace with your deployed contract address
-    const officialAddress = '0x302cB20787E132D162cbBA18a4eb3c99f857Ef29'; // Replace with the government's wallet address
+    // const contractAddress = '0xBeB7D590cEe06A941db8302434D023b52283D30B'; // Replace with your deployed contract address
+    const contractAddress = '0x5D7c7167deE64C76CBff3825bcCD417B99B6c8e4'; // Replace with your deployed contract address
+    const officialAddress = '0x7CbF50988586a13463E1f93B5d5F8bc523F49d10'; // Replace with the government's wallet address
 
     useEffect(() => {
         const connectWallet = async () => {
@@ -55,6 +59,46 @@ function App() {
             window.ethereum.removeListener('accountsChanged', connectWallet);
         };
     }, []);
+    // useEffect(() => {
+    //     const connectWallet = async () => {
+    //         if (window.ethereum) {
+    //             const provider = new ethers.BrowserProvider(window.ethereum);
+    //             const signer = await provider.getSigner();
+    
+    //             try {
+    //                 // Listen for network changes
+    //                 window.ethereum.on('chainChanged', (chainId) => {
+    //                     console.log(`Network changed to ${parseInt(chainId, 16)}`);
+    //                     window.location.reload(); // Reload the page on network change
+    //                 });
+    
+    //                 const network = await provider.getNetwork();
+    //                 if (network.chainId !== 31337) { // Replace 1337 with your expected chain ID (e.g., 31337 for Ganache)
+    //                     alert('Please switch to the appropriate network');
+    //                 }
+    
+    //                 const tenderContract = new ethers.Contract(contractAddress, TenderABI, signer);
+    //                 setContract(tenderContract);
+    //                 const accounts = await provider.send("eth_requestAccounts", []);
+    //                 setAccount(accounts[0]);
+    //                 setIsOfficial(accounts[0].toLowerCase() === officialAddress.toLowerCase());
+    
+    //                 await loadTenders(tenderContract);
+    //             } catch (error) {
+    //                 console.error("Error connecting wallet:", error);
+    //             }
+    //         } else {
+    //             alert('MetaMask not detected!');
+    //         }
+    //     };
+    
+    //     connectWallet();
+    
+    //     return () => {
+    //         window.ethereum.removeListener('chainChanged', () => window.location.reload());
+    //     };
+    // }, []);
+    
 
     const loadTenders = async (tenderContract = contract) => {
         if (tenderContract) {
@@ -66,7 +110,7 @@ function App() {
                 tempTenders.push({ id: i, ...tender });
             }
             setTenders(tempTenders);
-            // console.log("tempTenders:\n", tempTenders);
+            console.log("tempTenders:\n", tempTenders);
 
         }
     };
@@ -101,22 +145,6 @@ function App() {
 
 
 
-
-            // const rawBidsList = await contract.getBids(tenderId);
-            // // Convert the Proxy to a standard array if necessary
-            // const bidsList = Array.isArray(rawBidsList) ? rawBidsList : Array.from(rawBidsList);
-
-            // console.log(`Bids for Tender ID ${tenderId}:`, bidsList);
-
-            // const formattedBids = bidsList.map((bid) => ({
-            //     bidder: bid.bidder || 'N/A',
-            //     amount: bid.bidAmount ? ethers.formatUnits(bid.bidAmount, 'wei') : null,
-            // }));
-
-            // setBids(formattedBids);
-            // setSelectedTenderId(tenderId);
-
-
             const rawBidsList = await contract.getBids(tenderId);
         
             // Attempt to resolve Proxy by manually iterating or using mapping utilities
@@ -125,19 +153,50 @@ function App() {
                 amount: bid.bidAmount ? ethers.formatUnits(bid.bidAmount, 'wei') : null,
             }));
 
+            const sorted = [...bidsList].sort((a, b) => a.bidAmount - b.bidAmount);
+
             // console.log("Bids after mapping:", bidsList);
 
             setBids(bidsList);
             setSelectedTenderId(tenderId);
+            setSortedBids(sorted);
         }
     };
 
-    const selectWinner = async (tenderId, bidderAddress) => {
-        if (contract) {
-            const tx = await contract.selectWinner(tenderId, bidderAddress);
-            await tx.wait();
-            alert('Winner selected successfully!');
-            loadTenders();
+
+
+    const selectWinner = async (tenderId, winnerAddress) => {
+
+        
+        if (contract && isOfficial) {
+            try {
+
+                // console.log("Inside selectWinner");
+                const tx = await contract.chooseWinner(tenderId, winnerAddress);
+                await tx.wait();
+                alert(`Winner selected successfully for tender ID ${tenderId}`);
+
+
+                // Update the tenders list to show the winner
+                // setSelectedWinner(winnerAddress);
+
+                // let tempList = [];
+                // tempList.push({tenderId: tenderId, winner: selectWinner}, ...winners);
+                // setWinners(tempList);
+
+                // Update the winners state with the selected winner for the tender
+                // setWinners((prevWinners) => ({
+                //     ...prevWinners,
+                //     [tenderId]: winnerAddress, // Set winner for this tender ID
+                // }));
+
+
+                await loadTenders();
+
+            } catch (error) {
+                console.error('Error choosing winner:', error);
+                alert('Failed to select winner');
+            }
         }
     };
 
@@ -181,16 +240,18 @@ function App() {
                                 <p>Minimum Bid: {tender[2] ? ethers.formatUnits(tender[2], 'wei') : 'N/A'} wei</p>
                                 {/* <p>Minimum Bid: {ethers.formatUnits(tender.minBidAmount, 'wei')} wei</p> */}
                                 <p>Status: {tender[3] ? 'Open' : 'Closed'}</p>
+                                <p>Winner: {tender[4] !== ethers.AddressZero ? tender[4] : 'No winner yet'}</p>
+                                {/* <p>Winner: {winners[tender.id] ? winners[tender.id] : 'No winner yet'}</p> */}
                                 <button onClick={() => viewBids(tender.id)}>View Bids</button>
                             </li>
                         ))}
                     </ul>
 
-                    {selectedTenderId && (
+                    {selectedTenderId && sortedBids.length > 0 && (
                         <div>
                             <h3>Bids for Tender ID: {selectedTenderId}</h3>
                             <ul>
-                                {bids.map((bid, index) => (
+                                {sortedBids.map((bid, index) => (
                                     <li key={index}>
                                         <p>Bidder: {bid.bidder}</p>
                                         <p>Bid Amount: {ethers.formatUnits(bid.amount, 'wei')} wei</p>
