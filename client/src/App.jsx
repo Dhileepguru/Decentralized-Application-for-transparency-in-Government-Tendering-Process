@@ -6,6 +6,8 @@ import Tender from './contractJson/Tender.json'; // Replace with your ABI JSON f
 const TenderABI = Tender.abi; // Access the ABI property
 
 function App() {
+
+    const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
     const [account, setAccount] = useState(null);
     const [isOfficial, setIsOfficial] = useState(false);
     const [contract, setContract] = useState(null);
@@ -16,8 +18,9 @@ function App() {
     const [winners, setWinners] = useState({});
     const [bidAmount, setBidAmount] = useState(0);
     const [newTenderDesc, setNewTenderDesc] = useState('');
-    const [selectedWinner, setSelectedWinner] = useState(null);
+    // const [selectedWinner, setSelectedWinner] = useState(null);
     const [minBidAmount, setMinBidAmount] = useState(0);
+    const [bidHistory, setBidHistory] = useState({}); // Track if an account has bid on each tender
     // const contractAddress = '0xBeB7D590cEe06A941db8302434D023b52283D30B'; // Replace with your deployed contract address
     const contractAddress = '0x5D7c7167deE64C76CBff3825bcCD417B99B6c8e4'; // Replace with your deployed contract address
     const officialAddress = '0x7CbF50988586a13463E1f93B5d5F8bc523F49d10'; // Replace with the government's wallet address
@@ -59,45 +62,7 @@ function App() {
             window.ethereum.removeListener('accountsChanged', connectWallet);
         };
     }, []);
-    // useEffect(() => {
-    //     const connectWallet = async () => {
-    //         if (window.ethereum) {
-    //             const provider = new ethers.BrowserProvider(window.ethereum);
-    //             const signer = await provider.getSigner();
-    
-    //             try {
-    //                 // Listen for network changes
-    //                 window.ethereum.on('chainChanged', (chainId) => {
-    //                     console.log(`Network changed to ${parseInt(chainId, 16)}`);
-    //                     window.location.reload(); // Reload the page on network change
-    //                 });
-    
-    //                 const network = await provider.getNetwork();
-    //                 if (network.chainId !== 31337) { // Replace 1337 with your expected chain ID (e.g., 31337 for Ganache)
-    //                     alert('Please switch to the appropriate network');
-    //                 }
-    
-    //                 const tenderContract = new ethers.Contract(contractAddress, TenderABI, signer);
-    //                 setContract(tenderContract);
-    //                 const accounts = await provider.send("eth_requestAccounts", []);
-    //                 setAccount(accounts[0]);
-    //                 setIsOfficial(accounts[0].toLowerCase() === officialAddress.toLowerCase());
-    
-    //                 await loadTenders(tenderContract);
-    //             } catch (error) {
-    //                 console.error("Error connecting wallet:", error);
-    //             }
-    //         } else {
-    //             alert('MetaMask not detected!');
-    //         }
-    //     };
-    
-    //     connectWallet();
-    
-    //     return () => {
-    //         window.ethereum.removeListener('chainChanged', () => window.location.reload());
-    //     };
-    // }, []);
+
     
 
     const loadTenders = async (tenderContract = contract) => {
@@ -117,20 +82,40 @@ function App() {
 
     const createTender = async () => {
         if (contract) {
+            if(window.confirm("Are you sure you want to create this tender?")){
 
-            const tx = await contract.createTender(newTenderDesc, ethers.parseUnits(minBidAmount.toString(), 'wei'));
-            await tx.wait();
-            alert('Tender created successfully!');
-            loadTenders();
+                const tx = await contract.createTender(newTenderDesc, ethers.parseUnits(minBidAmount.toString(), 'wei'));
+                await tx.wait();
+                alert('Tender created successfully!');
+                setNewTenderDesc(''); // Clear text input
+                setMinBidAmount(''); // Clear text input
+                loadTenders();
+            }
         }
     };
 
     const submitBid = async (tenderId) => {
         if (contract && bidAmount > 0) {
-            const tx = await contract.submitBid(tenderId, ethers.parseUnits(bidAmount.toString(), 'wei'));
-            await tx.wait();
-            alert('Bid submitted successfully!');
-            loadTenders();
+            if(window.confirm("Are you sure you want to submit your bid?")){
+
+                if (bidHistory[tenderId] && bidHistory[tenderId].includes(account)) {
+                    alert('You can only bid once on a particular tender.');
+                    return;
+                }
+
+                const tx = await contract.submitBid(tenderId, ethers.parseUnits(bidAmount.toString(), 'wei'));
+                await tx.wait();
+                alert('Bid submitted successfully!');
+
+                // Add account to bid history for the specific tender
+                setBidHistory((prev) => ({
+                    ...prev,
+                    [tenderId]: prev[tenderId] ? [...prev[tenderId], account] : [account],
+                }));
+
+                setBidAmount(''); // Clear bid amount input
+                loadTenders();
+            }
         }
     };
 
@@ -155,47 +140,29 @@ function App() {
 
             const sorted = [...bidsList].sort((a, b) => a.bidAmount - b.bidAmount);
 
-            // console.log("Bids after mapping:", bidsList);
 
             setBids(bidsList);
             setSelectedTenderId(tenderId);
             setSortedBids(sorted);
+            console.log("SortedBids",sortedBids);
         }
     };
 
 
 
     const selectWinner = async (tenderId, winnerAddress) => {
-
-        
         if (contract && isOfficial) {
-            try {
-
-                // console.log("Inside selectWinner");
-                const tx = await contract.chooseWinner(tenderId, winnerAddress);
-                await tx.wait();
-                alert(`Winner selected successfully for tender ID ${tenderId}`);
-
-
-                // Update the tenders list to show the winner
-                // setSelectedWinner(winnerAddress);
-
-                // let tempList = [];
-                // tempList.push({tenderId: tenderId, winner: selectWinner}, ...winners);
-                // setWinners(tempList);
-
-                // Update the winners state with the selected winner for the tender
-                // setWinners((prevWinners) => ({
-                //     ...prevWinners,
-                //     [tenderId]: winnerAddress, // Set winner for this tender ID
-                // }));
-
-
-                await loadTenders();
-
-            } catch (error) {
-                console.error('Error choosing winner:', error);
-                alert('Failed to select winner');
+            if (window.confirm(`Are you sure you want to select this winner for tender ID ${tenderId}?`)) {
+                try {
+                    const tx = await contract.chooseWinner(tenderId, winnerAddress);
+                    await tx.wait();
+                    alert(`Winner selected successfully for tender ID ${tenderId}`);
+                    setBids([]); // Clear bids after selecting a winner
+                    await loadTenders();
+                } catch (error) {
+                    console.error('Error choosing winner:', error);
+                    alert('Failed to select winner');
+                }
             }
         }
     };
@@ -238,10 +205,8 @@ function App() {
                                 <p>Tender ID: {tender.id}</p>
                                 <p>Description: {tender[1]}</p>
                                 <p>Minimum Bid: {tender[2] ? ethers.formatUnits(tender[2], 'wei') : 'N/A'} wei</p>
-                                {/* <p>Minimum Bid: {ethers.formatUnits(tender.minBidAmount, 'wei')} wei</p> */}
                                 <p>Status: {tender[3] ? 'Open' : 'Closed'}</p>
-                                <p>Winner: {tender[4] !== ethers.AddressZero ? tender[4] : 'No winner yet'}</p>
-                                {/* <p>Winner: {winners[tender.id] ? winners[tender.id] : 'No winner yet'}</p> */}
+                                <p>Winner: {tender[4] !== ZERO_ADDRESS ? tender[4] : 'No winner yet'}</p>
                                 <button onClick={() => viewBids(tender.id)}>View Bids</button>
                             </li>
                         ))}
@@ -255,9 +220,13 @@ function App() {
                                     <li key={index}>
                                         <p>Bidder: {bid.bidder}</p>
                                         <p>Bid Amount: {ethers.formatUnits(bid.amount, 'wei')} wei</p>
-                                        <button onClick={() => selectWinner(selectedTenderId, bid.bidder)}>
-                                            Select as Winner
-                                        </button>
+                                        {tenders.find(t => t.id === selectedTenderId)?.isOpen ? (
+                                            <button onClick={() => selectWinner(selectedTenderId, bid.bidder)}>
+                                                Select as Winner
+                                            </button>
+                                        ) : (
+                                            <button disabled>Select as Winner (Closed)</button>
+                                        )}
                                     </li>
                                 ))}
                             </ul>
@@ -275,12 +244,13 @@ function App() {
                                 <p>Description: {tender[1]}</p>
                                 <p>Minimum Bid: {tender[2] ? ethers.formatUnits(tender[2], 'wei') : 'N/A'} wei</p>
                                 <p>Status: {tender[3] ? 'Open' : 'Closed'}</p>
-                                {tender[3] && (
+                                {tender[3] && !(bidHistory[tender.id] && bidHistory[tender.id].includes(account)) && (
                                     <div>
                                         <input
                                             
                                             type="text"
                                             placeholder="Your Bid Amount (wei)"
+                                            value={bidAmount}
                                             
                                             onChange={(e) => {
                                                 const parsedValue = parseInt(e.target.value);
