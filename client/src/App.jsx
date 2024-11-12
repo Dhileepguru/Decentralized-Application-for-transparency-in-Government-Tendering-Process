@@ -20,10 +20,8 @@ function App() {
     const [newTenderDesc, setNewTenderDesc] = useState('');
     const [minBidAmount, setMinBidAmount] = useState(0);
     const [bidHistory, setBidHistory] = useState({});
+    
     const contractAddress = '0x5D7c7167deE64C76CBff3825bcCD417B99B6c8e4'; // Replace with your deployed contract address
-
-
-    // const contractAddress = '0x5D7c7167deE64C76CBff3825bcCD417B99B6c8e4';
     const governmentOfficial = "0x7CbF50988586a13463E1f93B5d5F8bc523F49d10";
     const bidder1 = "0xb7D489B00A12dD2e4Dd210DD77C7419c78215443";
     const public1 = "0x14758BD24d28D608E72038Ec49D24441dDeF418F";
@@ -140,7 +138,7 @@ function App() {
     };
 
     const selectWinner = async (tenderId, winnerAddress) => {
-        if (contract && isOfficial) {
+        if (contract && userType==="official") {
             if (window.confirm(`Are you sure you want to select this winner for tender ID ${tenderId}?`)) {
                 try {
                     const tx = await contract.chooseWinner(tenderId, winnerAddress);
@@ -250,7 +248,9 @@ function App() {
                                 <p>Minimum Bid: {tender[2] ? ethers.formatUnits(tender[2], 'wei') : 'N/A'} wei</p>
                                 <p>Status: {tender[3] ? 'Open' : 'Closed'}</p>
                                 <p>Winner: {tender[4] !== ZERO_ADDRESS ? tender[4] : 'No winner yet'}</p>
-                                {tender[3] && <button onClick={() => viewBids(tender.id)}>View Bids</button>}
+                                {/* {tender[3] && <button onClick={() => viewBids(tender.id)}>View Bids</button>} */}
+                                <button onClick={() => viewBids(tender.id)}>View Bids</button>
+
                             </li>
                         ))}
                     </ul>
@@ -263,7 +263,7 @@ function App() {
                                     <li key={index}>
                                         <p>Bidder: {bid.bidder}</p>
                                         <p>Bid Amount: {ethers.formatUnits(bid.amount, 'wei')} wei</p>
-                                        {tenders.find(tender => tender.id === selectedTenderId)?.winner === ZERO_ADDRESS && (
+                                        {tenders.find(tender => tender.id === selectedTenderId)?.[4] === ZERO_ADDRESS && (
                                             <button onClick={() => selectWinner(selectedTenderId, bid.bidder)}>Select as Winner</button>
                                         )}
                                     </li>
