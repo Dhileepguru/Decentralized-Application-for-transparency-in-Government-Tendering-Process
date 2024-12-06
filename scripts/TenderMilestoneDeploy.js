@@ -6,7 +6,7 @@ async function main() {
     console.log("Starting deployment...");
 
     // Deploy the Tender contract using Ethers.js v6
-    const TenderFactory = await ethers.deployContract("Tender");
+    const TenderFactory = await ethers.deployContract("Tender_Milestone");
     console.log("Deploying Tender, please wait...");
 
     // Wait for the contract deployment to be completed
@@ -24,4 +24,4 @@ main()
 
 
 
-// 0x5bCf6DfFfd3eE54F9Db23c9ffDc5Eeb073BF0B56
+// 0x71106C97353b423c9f8263652Ac963779fb8dfC5

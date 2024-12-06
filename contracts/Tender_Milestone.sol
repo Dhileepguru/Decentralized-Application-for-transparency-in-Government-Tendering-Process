@@ -1,13 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-contract Tender {
+contract Tender_Milestone {
     struct TenderDetails {
         uint id;
         string description;
         uint minBidAmount;
         bool isOpen;
         address winner;
+        uint totalFunds;
+    }
+
+    struct Milestone {
+        uint id;
+        string description;
+        uint amount;
+        bool isCompleted;
     }
 
     struct Bid {
@@ -19,6 +27,7 @@ contract Tender {
     uint public tenderCounter;
     mapping(uint => TenderDetails) public tenders;
     mapping(uint => Bid[]) public bids;
+    mapping(uint => Milestone[]) public milestones;
 
     address public governmentOfficial;
 
@@ -31,9 +40,14 @@ contract Tender {
         _;
     }
 
-    function createTender(string memory description, uint minBidAmount) public onlyGovernmentOfficial {
+    modifier onlyWinner(uint tenderId) {
+        require(msg.sender == tenders[tenderId].winner, "Only the project winner can perform this action");
+        _;
+    }
+
+    function createTender(string memory description, uint minBidAmount, uint totalFunds) public onlyGovernmentOfficial {
         tenderCounter++;
-        tenders[tenderCounter] = TenderDetails(tenderCounter, description, minBidAmount, true, address(0));
+        tenders[tenderCounter] = TenderDetails(tenderCounter, description, minBidAmount, true, address(0), totalFunds);
     }
 
     function submitBid(uint tenderId, uint bidAmount) public {
@@ -55,34 +69,33 @@ contract Tender {
         require(tenders[tenderId].isOpen, "Tender is already closed");
 
         bool validBidder = false;
-
-        // Check if the selected address is a valid bidder
         for (uint i = 0; i < bids[tenderId].length; i++) {
             if (bids[tenderId][i].bidder == winnerAddress) {
                 validBidder = true;
                 break;
             }
         }
-
         require(validBidder, "Selected address is not a valid bidder");
 
         tenders[tenderId].winner = winnerAddress;
         tenders[tenderId].isOpen = false;
     }
-    // function selectWinner(uint tenderId) public onlyGovernmentOfficial {
-    //     require(tenders[tenderId].isOpen, "Tender is already closed");
 
-    //     uint lowestBid = type(uint).max;
-    //     address lowestBidder;
+    function createMilestone(uint tenderId, string memory description, uint amount) public onlyWinner(tenderId) {
+        require(amount <= tenders[tenderId].totalFunds, "Insufficient funds for this milestone");
+        milestones[tenderId].push(Milestone(milestones[tenderId].length + 1, description, amount, false));
+    }
 
-    //     for(uint i=0; i< bids[tenderId].length; i++){
-    //         if(bids[tenderId][i].bidAmount < lowestBid){
-    //             lowestBid = bids[tenderId][i].bidAmount;
-    //             lowestBidder = bids[tenderId][i].bidder;
-    //         }
-    //     }
+    function getMilestones(uint tenderId) public view returns (Milestone[] memory) {
+        return milestones[tenderId];
+    }
 
-    //     tenders[tenderId].winner = lowestBidder;
-    //     tenders[tenderId].isOpen = false;
-    // }
+    function approveMilestone(uint tenderId, uint milestoneId) public onlyGovernmentOfficial {
+        require(milestones[tenderId][milestoneId - 1].isCompleted == false, "Milestone already completed");
+        milestones[tenderId][milestoneId - 1].isCompleted = true;
+        tenders[tenderId].totalFunds -= milestones[tenderId][milestoneId - 1].amount;
+        payable(tenders[tenderId].winner).transfer(milestones[tenderId][milestoneId - 1].amount);
+    }
+
+    receive() external payable {}
 }
