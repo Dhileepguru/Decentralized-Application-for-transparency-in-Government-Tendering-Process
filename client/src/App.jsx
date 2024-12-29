@@ -9,7 +9,7 @@ function App() {
         <Router>
             <Routes>
                 <Route path="/" element={<TenderManagement />} />
-                <Route path="/milestones/:tenderId" element={<MilestoneManagement />} />
+                <Route path="/milestones/" element={<MilestoneManagement />} />
             </Routes>
         </Router>
     );

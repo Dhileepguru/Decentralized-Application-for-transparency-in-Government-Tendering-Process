@@ -1,334 +1,313 @@
-// // import React, { useState, useEffect } from 'react';
-// // import { ethers } from 'ethers';
-// // import TenderContract from '../contractJson/Tender_Milestone.json';
-
-// // const MilestoneManagement = () => {
-// //     const [milestones, setMilestones] = useState([]);
-// //     const [description, setDescription] = useState('');
-// //     const [amount, setAmount] = useState('');
-// //     const contractAddress = '0x71106C97353b423c9f8263652Ac963779fb8dfC5';
-
-// //     useEffect(() => {
-// //         const fetchMilestones = async () => {
-// //             const provider = new ethers.providers.Web3Provider(window.ethereum);
-// //             const contract = new ethers.Contract(contractAddress, TenderContract.abi, provider);
-// //             const data = await contract.getMilestones(1); // Assuming tenderId = 1
-// //             setMilestones(data);
-// //         };
-
-// //         fetchMilestones();
-// //     }, []);
-
-// //     const createMilestone = async () => {
-// //         const provider = new ethers.providers.Web3Provider(window.ethereum);
-// //         const signer = provider.getSigner();
-// //         const contract = new ethers.Contract(contractAddress, TenderContract.abi, signer);
-// //         await contract.createMilestone(1, description, ethers.utils.parseEther(amount));
-// //     };
-
-// //     return (
-// //         <div>
-// //             <h1>Milestone Management</h1>
-// //             <form onSubmit={createMilestone}>
-// //                 <input
-// //                     type="text"
-// //                     placeholder="Description"
-// //                     value={description}
-// //                     onChange={(e) => setDescription(e.target.value)}
-// //                 />
-// //                 <input
-// //                     type="number"
-// //                     placeholder="Amount"
-// //                     value={amount}
-// //                     onChange={(e) => setAmount(e.target.value)}
-// //                 />
-// //                 <button type="submit">Create Milestone</button>
-// //             </form>
-// //             <h2>Milestones</h2>
-// //             <ul>
-// //                 {milestones.map((ms, index) => (
-// //                     <li key={index}>{ms.description} - {ethers.utils.formatEther(ms.amount)} ETH</li>
-// //                 ))}
-// //             </ul>
-// //         </div>
-// //     );
-// // };
-
-// // export default MilestoneManagement;
-
+//--------------------------
 
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import Tender from '../contractJson/Tender_Milestone.json'; // Replace with your ABI JSON file
+import { useSearchParams } from 'react-router-dom';
+import Tender from '../contractJson/Tender_Milestone.json';
+
 const TenderABI = Tender.abi;
 
 function MilestoneManagement() {
-    const [account, setAccount] = useState(null);
-    const [userType, setUserType] = useState(''); // 'official', 'bidder', 'public', 'tenderer'
-    const [contract, setContract] = useState(null);
-    const [milestones, setMilestones] = useState([]);
-    const [selectedTenderId, setSelectedTenderId] = useState(null);
-    const [milestoneDesc, setMilestoneDesc] = useState('');
-    const [milestoneAmount, setMilestoneAmount] = useState(0);
-    const [totalFundAllocated, setTotalFundAllocated] = useState(0);
-    const [remainingFund, setRemainingFund] = useState(0);
+  const [searchParams] = useSearchParams();
+  const tenderId = searchParams.get('tenderId');
+  const userAddress = searchParams.get('address');
+  // isWinner passed as a *hint* for the UI
+  const isWinnerQueryParam = searchParams.get('isWinner') === 'true';
 
-    // const contractAddress = '0x5D7c7167deE64C76CBff3825bcCD417B99B6c8e4'; // Replace with your deployed contract address
-    const contractAddress = '0x8062885aC55e56BF6f5a660f0B1eC9ADc59814E4'; // Replace with your deployed contract address
-    const governmentOfficial = "0x7CbF50988586a13463E1f93B5d5F8bc523F49d10";
-    const tenderer1 = "0xb7d489b00a12dd2e4dd210dd77c7419c78215443"; // Replace with your tenderer's address
+  // Basic states
+  const [account, setAccount] = useState(null);
+  const [contract, setContract] = useState(null);
 
-    useEffect(() => {
-        const connectWallet = async () => {
-            if (window.ethereum) {
-                const provider = new ethers.BrowserProvider(window.ethereum);
-                const signer = await provider.getSigner();
-                const tenderContract = new ethers.Contract(contractAddress, TenderABI, signer);
-                setContract(tenderContract);
+  // We'll store tender data (including the real on-chain winner)
+  const [tenderData, setTenderData] = useState({
+    id: 0,
+    description: '',
+    minBidAmount: 0,
+    isOpen: false,
+    winner: '',
+    estimateCost: 0,
+    finalCost: 0
+  });
 
-                const accounts = await provider.send("eth_requestAccounts", []);
-                setAccount(accounts[0]);
+  // We'll keep the final "isWinner" logic here (after on-chain check)
+  const [isRealWinner, setIsRealWinner] = useState(false);
 
-                if (accounts[0].toLowerCase() === governmentOfficial.toLowerCase()) {
-                    setUserType('official');
-                } else if (accounts[0].toLowerCase() === tenderer1.toLowerCase()) {
-                    setUserType('tenderer');
-                } else {
-                    setUserType('public');
-                }
+  // For milestones
+  const [milestones, setMilestones] = useState([]);
 
-                await loadTenderDetails(tenderContract);
-            } else {
-                alert('MetaMask not detected!');
-            }
-        };
+  // For adding a milestone
+  const [milestoneDesc, setMilestoneDesc] = useState('');
+  const [milestoneAmount, setMilestoneAmount] = useState(0);
 
-        connectWallet();
+  // Constants
+  const contractAddress = '0x74a5298D5468EAb1c06c802A3396fed01fa369c5'; // Replace with your deployed contract address
+  const governmentOfficial = "0x7CbF50988586a13463E1f93B5d5F8bc523F49d10";
 
-        window.ethereum.on('accountsChanged', (accounts) => {
-            setAccount(accounts[0]);
-            if (accounts[0].toLowerCase() === governmentOfficial.toLowerCase()) {
-                setUserType('official');
-            } else if (accounts[0].toLowerCase() === tenderer1.toLowerCase()) {
-                setUserType('tenderer');
-            } else {
-                setUserType('public');
-            }
-            loadTenderDetails();
-        });
+  // 1) On mount, set up contract & account
+  useEffect(() => {
+    const setupContract = async () => {
+      if (!window.ethereum) {
+        alert('MetaMask not detected!');
+        return;
+      }
 
-        return () => {
-            window.ethereum.removeListener('accountsChanged', connectWallet);
-        };
-    }, []);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const deployedContract = new ethers.Contract(contractAddress, TenderABI, signer);
+      setContract(deployedContract);
 
-    const loadTenderDetails = async (tenderContract = contract) => {
-        if (tenderContract) {
-            // Load tender details like total fund allocated
-            const tenderDetails = await tenderContract.getTenderDetails(selectedTenderId);
-            setTotalFundAllocated(ethers.formatUnits(tenderDetails[2], 'wei')); // Assuming total fund is at index 2
-            setRemainingFund(totalFundAllocated); // Set initial remaining fund
-            const milestoneCount = await tenderContract.getMilestoneCount(selectedTenderId);
-            let milestonesArray = [];
-            for (let i = 1; i <= milestoneCount; i++) {
-                const milestone = await tenderContract.getMilestoneDetails(selectedTenderId, i);
-                milestonesArray.push({ id: i, ...milestone });
-            }
-            setMilestones(milestonesArray);
-        }
+      // If userAddress wasn't in the query param, prompt for accounts
+      if (!userAddress) {
+        const accounts = await provider.send("eth_requestAccounts", []);
+        setAccount(accounts[0]);
+      } else {
+        setAccount(userAddress);
+      }
     };
 
-    const createMilestone = async () => {
-        if (contract && milestoneAmount > 0 && milestoneDesc) {
-            if (remainingFund < milestoneAmount) {
-                alert('Insufficient funds remaining to create this milestone.');
-                return;
-            }
+    setupContract();
 
-            const tx = await contract.createMilestone(selectedTenderId, milestoneDesc, ethers.parseUnits(milestoneAmount.toString(), 'wei'));
-            await tx.wait();
+    // Listen for account switching
+    const handleAccountChange = (accounts) => {
+      setAccount(accounts[0]);
+    };
+    window.ethereum?.on('accountsChanged', handleAccountChange);
 
-            alert('Milestone created successfully!');
-            setMilestoneDesc('');
-            setMilestoneAmount(0);
-            loadTenderDetails();
-        }
+    return () => {
+      window.ethereum?.removeListener('accountsChanged', handleAccountChange);
+    };
+  }, [userAddress]);
+
+  // 2) Once we have both contract & tenderId, load tender details
+  useEffect(() => {
+    if (!contract || !tenderId) return;
+
+    const loadTenderDetails = async () => {
+      const details = await contract.getTenderDetails(tenderId);
+      // struct TenderDetails {
+      //   uint id;             // index 0
+      //   string description;  // index 1
+      //   uint minBidAmount;   // index 2
+      //   bool isOpen;         // index 3
+      //   address winner;      // index 4
+      //   uint estimateCost;   // index 5
+      //   uint finalCost;      // index 6
+      // }
+      const updatedTenderData = {
+        id: Number(details[0]),
+        description: details[1],
+        minBidAmount: Number(ethers.formatUnits(details[2], 'wei')),
+        isOpen: details[3],
+        winner: details[4],
+        estimateCost: Number(ethers.formatUnits(details[5], 'wei')),
+        finalCost: Number(ethers.formatUnits(details[6], 'wei'))
+      };
+      setTenderData(updatedTenderData);
+
+      // Now fetch the Milestone[] array
+      const milestoneList = await contract.getMilestones(tenderId);
+      const mappedMilestones = milestoneList.map((m, idx) => ({
+        id: idx + 1,
+        description: m[0],
+        fundRequested: m[1],
+        isApproved: m[2]
+      }));
+      setMilestones(mappedMilestones);
     };
 
-    const sendFundsToTenderer = async (milestoneId) => {
-        if (contract && userType === 'official') {
-            const milestone = milestones.find(m => m.id === milestoneId);
-            if (milestone && milestone.amount <= remainingFund) {
-                const tx = await contract.sendFundsToTenderer(selectedTenderId, milestoneId);
-                await tx.wait();
+    loadTenderDetails();
+  }, [contract, tenderId]);
 
-                setRemainingFund(remainingFund - milestone.amount);
-                alert(`Funds sent successfully to tenderer for milestone ID ${milestoneId}`);
-            } else {
-                alert('Insufficient funds or milestone not found');
-            }
-        }
-    };
+  // 3) Once we have account & tenderData, verify if user is the real winner
+  useEffect(() => {
+    if (!account || !tenderData.winner) return;
 
-    return (
-        <div className="App">
-            <h1>Milestone Management</h1>
-            <p>Connected account: {account}</p>
+    // We do a real check: on-chain winner vs. connected user
+    const isActualWinner = 
+      account.toLowerCase() === tenderData.winner.toLowerCase() &&
+      tenderData.winner !== ethers.ZeroAddress;
 
-            {userType === 'tenderer' && (
-                <div>
-                    <h2>Tenderer Panel</h2>
-                    <h3>Create Milestone</h3>
-                    <input
-                        type="text"
-                        placeholder="Milestone Description"
-                        value={milestoneDesc}
-                        onChange={(e) => setMilestoneDesc(e.target.value)}
-                    />
-                    <input
-                        type="number"
-                        placeholder="Milestone Amount (wei)"
-                        value={milestoneAmount}
-                        onChange={(e) => setMilestoneAmount(Number(e.target.value))}
-                    />
-                    <button onClick={createMilestone}>Create Milestone</button>
-                </div>
-            )}
+    setIsRealWinner(isActualWinner);
+  }, [account, tenderData]);
 
-            {userType === 'official' && (
-                <div>
-                    <h2>Government Official Panel</h2>
-                    <h3>Milestones for Tender ID: {selectedTenderId}</h3>
-                    <ul>
-                        {milestones.map((milestone, index) => (
-                            <li key={index}>
-                                <p>Milestone ID: {milestone.id}</p>
-                                <p>Description: {milestone.description}</p>
-                                <p>Amount: {ethers.formatUnits(milestone.amount, 'wei')} wei</p>
-                                <button onClick={() => sendFundsToTenderer(milestone.id)}>
-                                    Send Funds to Tenderer
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
-        </div>
+
+
+
+    /**
+   * Helper: sumOfMilestonesSoFar
+   * Sums the fundRequested (in wei) of ALL milestones, whether approved or not
+   */
+    const sumOfMilestonesSoFar = milestones.reduce((acc, milestone) => {
+      // milestone.fundRequested is a BigInt or hex value
+      const requestedNum = Number(ethers.formatUnits(milestone.fundRequested, 'wei'));
+      return acc + requestedNum;
+    }, 0);
+  
+    /**
+     * Remaining funds in finalCost
+     * finalCost - sumOfMilestonesSoFar
+     */
+    const remainingBudget = tenderData.finalCost - sumOfMilestonesSoFar;
+    console.log("remainingBudget: ",remainingBudget);
+    console.log("sumOfMilestonesSoFar: ",sumOfMilestonesSoFar);
+
+
+
+
+
+
+
+
+  // 4) Add Milestone
+  const addMilestone = async () => {
+    if (!contract) return;
+
+    // We can optionally confirm user is the real on-chain winner in code too
+    if (!isRealWinner) {
+      alert('You must be the actual winner on chain to add a milestone!');
+      return;
+    }
+
+    if (!milestoneDesc || milestoneAmount <= 0) {
+      alert('Please enter a milestone description and valid amount.');
+      return;
+    }
+
+    // 1) Check if new sum would exceed finalCost
+    const newSum = sumOfMilestonesSoFar + milestoneAmount;
+    if (newSum > tenderData.finalCost) {
+      alert(
+        `Cannot create milestone. Total requested (${newSum} wei) would exceed final cost (${tenderData.finalCost} wei).`
+      );
+      return;
+    }
+       // 2) Confirmation
+       if (!window.confirm(`Are you sure you want to create a milestone requesting ${milestoneAmount} wei?`)) {
+        return;
+      }
+
+    const tx = await contract.addMilestone(
+      tenderId,
+      milestoneDesc,
+      ethers.parseUnits(milestoneAmount.toString(), 'wei')
     );
+    await tx.wait();
+
+    alert('Milestone added successfully!');
+    setMilestoneDesc('');
+    setMilestoneAmount(0);
+
+    // Re-fetch milestones
+    const milestoneList = await contract.getMilestones(tenderId);
+    const mapped = milestoneList.map((m, idx) => ({
+      id: idx + 1,
+      description: m[0],
+      fundRequested: m[1],
+      isApproved: m[2]
+    }));
+    setMilestones(mapped);
+  };
+
+  // 5) For the official to approve a milestone
+  const approveMilestone = async (index) => {
+    if (!contract) return;
+
+    // Only the official can approve
+    if (account.toLowerCase() !== governmentOfficial.toLowerCase()) {
+      alert('Only government official can approve milestone!');
+      return;
+    }
+
+
+    // Confirm
+    if (!window.confirm(`Are you sure you want to approve Milestone #${index + 1}?`)) {
+      return;
+    }
+
+    // The contract expects "milestoneIndex", which is 0-based
+    const tx = await contract.approveMilestone(tenderId, index);
+    await tx.wait();
+
+    alert(`Milestone #${index + 1} approved!`);
+
+    // Update state in memory
+    setMilestones((prev) => {
+      const updated = [...prev];
+      updated[index].isApproved = true;
+      return updated;
+    });
+  };
+
+  /** 
+   * For display logic: 
+   * - isWinnerQueryParam = "passed in URL", might be inaccurate if user tampered
+   * - isRealWinner = "true on chain", so definitely the real winner
+   */
+  const canAddMilestone = isWinnerQueryParam && isRealWinner;
+
+  return (
+    <div className="App">
+      <h1>Milestone Management</h1>
+      <p><strong>Connected account:</strong> {account}</p>
+
+       <div style={{ border: '1px solid #ccc', padding: '1rem', marginBottom: '1rem' }}>
+        <h2>Tender Details</h2>
+        <p><strong>ID:</strong> {tenderData.id}</p>
+        <p><strong>Description:</strong> {tenderData.description}</p>
+        <p><strong>Final Cost:</strong> {tenderData.finalCost} wei</p>
+        <p><strong>Sum of All Milestones So Far:</strong> {sumOfMilestonesSoFar} wei</p>
+        <p><strong>Remaining Budget:</strong> {remainingBudget} wei</p>
+        <p><strong>Winner:</strong> {tenderData.winner === ethers.ZeroAddress 
+          ? 'No winner yet' 
+          : tenderData.winner}
+        </p>
+      </div>
+
+      {/** If user is the real winner (per contract), show "Add Milestone" panel */}
+      {canAddMilestone && (
+        <div style={{ border: '1px solid #ccc', padding: '1rem', marginTop: '1rem' }}>
+          <h2>Add Milestone</h2>
+          <input
+            type="text"
+            placeholder="Milestone Description"
+            value={milestoneDesc}
+            onChange={(e) => setMilestoneDesc(e.target.value)}
+          />
+          <input
+            type="number"
+            placeholder="Fund Requested (wei)"
+            value={milestoneAmount}
+            onChange={(e) => setMilestoneAmount(Number(e.target.value))}
+          />
+          <button onClick={addMilestone}>Add Milestone</button>
+        </div>
+      )}
+
+      <div style={{ marginTop: '1rem' }}>
+        <h2>Milestones</h2>
+        {milestones.map((m, idx) => (
+          <div
+            key={idx}
+            style={{ border: '1px solid #eee', padding: '0.5rem', marginBottom: '0.5rem' }}
+          >
+            <p><strong># {m.id}</strong></p>
+            <p><strong>Description:</strong> {m.description}</p>
+            <p><strong>Fund Requested:</strong> {ethers.formatUnits(m.fundRequested, 'wei')} wei</p>
+            <p><strong>Approved?</strong> {m.isApproved ? 'Yes' : 'No'}</p>
+
+            {account && account.toLowerCase() === governmentOfficial.toLowerCase() && !m.isApproved && (
+              <button onClick={() => approveMilestone(idx)}>Approve</button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: '1rem' }}>
+        <p>isWinner (from URL): {String(isWinnerQueryParam)}</p>
+        <p>isRealWinner (on-chain check): {String(isRealWinner)}</p>
+      </div>
+    </div>
+  );
 }
 
 export default MilestoneManagement;
-
-
-// import React, { useState } from 'react';
-// import { useSearchParams } from 'react-router-dom';
-
-// function MilestoneManagement() {
-
-//     const [searchParams] = useSearchParams();
-//     const role = searchParams.get('role'); // Get role from query params
-
-//     const [milestones, setMilestones] = useState([]);
-//     const [numMilestones, setNumMilestones] = useState(0);
-//     const [currentMilestoneIndex, setCurrentMilestoneIndex] = useState(0);
-//     const [milestoneName, setMilestoneName] = useState('');
-//     const [requestedAmount, setRequestedAmount] = useState('');
-//     const [fundsDisbursed, setFundsDisbursed] = useState([]);
-
-//     const handleNumMilestonesSubmit = () => {
-//         setMilestones(Array(numMilestones).fill({ name: '', amount: '' }));
-//         setCurrentMilestoneIndex(0);
-//     };
-
-//     const handleMilestoneSubmit = () => {
-//         const updatedMilestones = [...milestones];
-//         updatedMilestones[currentMilestoneIndex] = {
-//             name: milestoneName,
-//             amount: requestedAmount,
-//         };
-//         setMilestones(updatedMilestones);
-//         setCurrentMilestoneIndex(currentMilestoneIndex + 1);
-//         setMilestoneName('');
-//         setRequestedAmount('');
-//     };
-
-//     const handleDisburseFund = (index) => {
-//         setFundsDisbursed([...fundsDisbursed, index]);
-//     };
-
-//     return (
-//         <div>
-//             <h1>Milestone Management</h1>
-//             {role === 'bidder' && (
-//                 <>
-//                     {milestones.length === 0 ? (
-//                         <div>
-//                             <label>
-//                                 Number of Milestones:
-//                                 <input
-//                                     type="number"
-//                                     value={numMilestones}
-//                                     onChange={(e) => setNumMilestones(parseInt(e.target.value, 10))}
-//                                 />
-//                             </label>
-//                             <button onClick={handleNumMilestonesSubmit}>Submit</button>
-//                         </div>
-//                     ) : currentMilestoneIndex < numMilestones ? (
-//                         <div>
-//                             <h3>Create Milestone {currentMilestoneIndex + 1}</h3>
-//                             <label>
-//                                 Milestone Name:
-//                                 <input
-//                                     type="text"
-//                                     value={milestoneName}
-//                                     onChange={(e) => setMilestoneName(e.target.value)}
-//                                 />
-//                             </label>
-//                             <label>
-//                                 Requested Amount:
-//                                 <input
-//                                     type="number"
-//                                     value={requestedAmount}
-//                                     onChange={(e) => setRequestedAmount(e.target.value)}
-//                                 />
-//                             </label>
-//                             <button onClick={handleMilestoneSubmit}>Add Milestone</button>
-//                         </div>
-//                     ) : (
-//                         <div>
-//                             <h3>Milestones Created:</h3>
-//                             <ul>
-//                                 {milestones.map((milestone, index) => (
-//                                     <li key={index}>
-//                                         <strong>{milestone.name}</strong>: ${milestone.amount}
-//                                     </li>
-//                                 ))}
-//                             </ul>
-//                         </div>
-//                     )}
-//                 </>
-//             )}
-
-//             {role === 'official' && (
-//                 <div>
-//                     <h3>Milestones:</h3>
-//                     <ul>
-//                         {milestones.map((milestone, index) => (
-//                             <li key={index}>
-//                                 <strong>{milestone.name}</strong>: ${milestone.amount}
-//                                 <button
-//                                     onClick={() => handleDisburseFund(index)}
-//                                     disabled={fundsDisbursed.includes(index)}
-//                                 >
-//                                     {fundsDisbursed.includes(index) ? 'Fund Disbursed' : 'Disburse Fund'}
-//                                 </button>
-//                             </li>
-//                         ))}
-//                     </ul>
-//                 </div>
-//             )}
-//         </div>
-//     );
-// }
-
-// export default MilestoneManagement;
